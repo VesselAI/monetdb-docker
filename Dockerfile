@@ -4,42 +4,37 @@
 # https://mozilla.org/MPL/2.0/.
 #
 # Copyright 1997 - July 2008 CWI, August 2008 - 2023 MonetDB B.V.
+# Extensive modifications copyright 2023 by VTT.
 
-FROM fedora:latest
+# Build arg base is the base image, which must be Debianish.
+# rev is the Git branch or tag to build.
 
-LABEL org.opencontainers.image.authors="svetlin.stalinov@monetdbsolutions.com"
+ARG base=debian
+FROM $base as build
+RUN apt-get update; apt-get -y install git build-essential perl
 
+WORKDIR /src
+ARG rev=master
+# Kluge around https://github.com/MonetDB/MonetDB/issues/7411.
+RUN git clone --depth 1 -b "$rev" https://github.com/MonetDB/MonetDB.git \
+    && cd MonetDB \
+    && perl -p -i -e 's/openssl-dev/libssl-dev/g' debian/control \
+    && apt-get -y build-dep . \
+    && dpkg-buildpackage -b -jauto 
 
-ARG enablerepo
+FROM $base
 
 # Create users and groups
 RUN groupadd -g 5000 monetdb && \
     useradd -u 5000 -g 5000 monetdb
 
 # Update & upgrade
-RUN dnf upgrade -y
+RUN apt-get update; apt-get -y upgrade && apt-get -y install tini
 
-# Install compression schemes
-RUN dnf install -y xz bzip2 lz4 gzip
-
-# Temporary fix for missing numpy.
-RUN dnf install -y python3-numpy
-
-# install MonetDB
-RUN dnf install -y https://dev.monetdb.org/downloads/Fedora/MonetDB-release.noarch.rpm
-
-# Install MonetDB packages
-RUN dnf install -y --best \
-    $(if [ -n "$enablerepo" ]; then echo "--enablerepo=${enablerepo}"; fi) \
-    MonetDB-SQL-server5 MonetDB-client \
-    MonetDB-cfitsio MonetDB-geom-MonetDB5\
-    MonetDB-python3
-
-#######################################################
-# Cleanup
-#######################################################
-RUN dnf -y clean all
-RUN rm -rf /tmp/* /var/tmp/*
+COPY --from=build /src/libmonetdb-client??_*.deb /src/libmonetdb??_*.deb \
+    /src/libmonetdb-stream??_*.deb /src/monetdb-client_*.deb \
+    /src/monetdb5-server_*.deb /src/monetdb5-sql_*.deb /deb/
+RUN dpkg -i /deb/*.deb || apt-get -y install -f
 
 #######################################################
 # Setup MonetDB
@@ -48,6 +43,7 @@ COPY scripts/entrypoint.sh /usr/local/bin
 
 EXPOSE 50000
 
+ENTRYPOINT ["tini", "--"]
 CMD [ "entrypoint.sh" ]
 
 STOPSIGNAL SIGINT
