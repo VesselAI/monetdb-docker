@@ -148,4 +148,4 @@ if [[ -n "$show_vars" ]]; then
 fi
 
 echo "Starting MonetDB daemon"
-monetdbd start -n "$farm_dir"
+exec monetdbd start -n "$farm_dir"
