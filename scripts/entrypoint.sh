@@ -122,6 +122,12 @@ enable_control () {
 
 configure
 
+# For running mclient in the container.
+[ -n "$admin_pass" ] && cat > .monetdb <<@end
+user=monetdb
+password=$admin_pass
+@end
+
 if [[ ! -f "$farm_dir"/.container_initialized ]]; then
 
     create_dbfarm
