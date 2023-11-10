@@ -39,7 +39,18 @@ RUN dpkg -i /deb/*.deb || apt-get -y install -f
 #######################################################
 # Setup MonetDB
 #######################################################
-COPY scripts/entrypoint.sh /usr/local/bin
+COPY --chmod=755 scripts/entrypoint.sh /usr/local/bin/
+
+# Group writability is required on OpenShift, which runs the container
+# as a random user but group 0.  Elsewhere we can choose: let's run
+# as monetdb:0.  The Debian packages would use monetdb:monetdb, but that
+# does not work for us.
+ENV MDB_FARM_DIR=/var/monetdb5/dbfarm
+WORKDIR /work
+RUN mkdir -p "$MDB_FARM_DIR" \
+    && chmod ug+rwx . "$MDB_FARM_DIR" \
+    && chown 5000:0 . "$MDB_FARM_DIR"
+USER 5000:0
 
 EXPOSE 50000
 
